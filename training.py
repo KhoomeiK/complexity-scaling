@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch.nn import CrossEntropyLoss
 from tqdm.auto import tqdm
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
 def compute_perplexity(dataloader, model, device="cuda"):
@@ -46,6 +47,8 @@ def run_training(
     train_loss = []
     valid_loss = []
 
+    lr_scheduler = CosineAnnealingLR(optimizer, T_max=len(train_dataloader))
+
     for epoch in range(num_epochs):
         progress_bar = tqdm(
             range(len(train_dataloader)), desc=f"Epoch {epoch + 1}/{num_epochs}"
@@ -62,6 +65,8 @@ def run_training(
             optimizer.step()
             optimizer.zero_grad()
             progress_bar.update(1)
+
+        lr_scheduler.step()
 
         model.eval()
         with torch.no_grad():
