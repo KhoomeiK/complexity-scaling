@@ -1,10 +1,11 @@
-from torch.utils.data import DataLoader
-from transformers import DataCollatorWithPadding
-from datasets import Dataset
 import gzip
 import io
 from typing import List, Union
 from statistics import median, stdev
+from torch.utils.data import DataLoader
+from transformers import DataCollatorWithPadding
+from datasets import Dataset, DatasetDict, load_dataset
+from huggingface_hub import HfApi, HfFolder
 
 
 def count_total_tokens(dataloader):
@@ -25,7 +26,9 @@ def pad_and_mask(sequence, sequence_length):
     return padded_sequence, mask
 
 
-def pcfg_dataset_to_dataloader(pcfg_dataset, padder_tokenizer, batch_size=8, context_length=256):
+def pcfg_dataset_to_dataloader(
+    pcfg_dataset, padder_tokenizer, batch_size=8, context_length=256
+):
     tok_seqs = [[int(tok) for tok in doc.split(" ")] for doc in pcfg_dataset]
 
     input_ids, attention_masks = [], []
@@ -87,3 +90,27 @@ def calculate_median_stdev_gzipability(pcfg_dataset):
 
     return med, std_dev
 
+
+def upload_to_huggingface(pcfg_dataset, gzip):
+    api = HfApi()
+    token = HfFolder.get_token()
+    if token is None:
+        raise ValueError(
+            "Hugging Face Hub token not found. Please login using `huggingface-cli login`."
+        )
+    username = api.whoami(token)["name"]
+
+    dataset = [{"text": seq} for seq in pcfg_dataset]
+    dataset_dict = {
+        "train": Dataset.from_list(dataset),  # map to list of dicts?
+    }
+
+    dataset = DatasetDict(dataset_dict)
+    dataset.push_to_hub(f"{username}/gzipscale-{gzip:0.2f}-10M")
+
+
+def download_from_huggingface(dataset_name):
+    dataset_dict = load_dataset(dataset_name)
+    dataset = dataset_dict["train"]
+    pcfg_dataset = dataset["text"]
+    return pcfg_dataset

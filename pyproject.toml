@@ -12,6 +12,7 @@ transformers = "^4.39.1"
 torch = "^2.2.1"
 statistics = "^1.0.3.5"
 pcfg = "^0.1.5"
+datasets = "^2.18.0"
 
 
 [build-system]

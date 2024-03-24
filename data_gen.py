@@ -1,6 +1,4 @@
 import random
-import math
-from nltk import Nonterminal
 from pcfg import PCFG
 
 
@@ -78,7 +76,7 @@ def generate_dataset(
     constrain_to_pfsa,
     num_toks_total,
     num_toks_per_seq=256,
-):
+) -> list[str]:
     grammar = create_random_pcfg(
         num_nonterminals,
         num_terminals,
@@ -131,11 +129,44 @@ def generate_dataset(
 
 
 if __name__ == "__main__":
+    from data_utils import (
+        calculate_median_stdev_gzipability,
+        count_total_tokens,
+        pcfg_dataset_to_dataloader,
+        upload_to_huggingface,
+    )
+    from transformers import AutoTokenizer
+
+    context_length = 256
+    tokenizer = AutoTokenizer.from_pretrained(
+        "meta-llama/Llama-2-7b-chat-hf", token="[REDACTED]"
+    )
+    tokenizer.add_special_tokens({"pad_token": "<pad>"})
+
     dataset_stats = [
+        (3, 20, 2, 2, False),
         (5, 50, 3, 2, False),
         (10, 150, 5, 3, False),
         (20, 300, 10, 5, False),
-        (50, 600, 30, 15, False),
+        (30, 400, 10, 8, False),
+        (50, 500, 20, 15, False),
         (100, 2000, 100, 30, False),
     ]
-    pcfg_datasets = [generate_dataset(*row, 1_000_000) for row in dataset_stats]
+    pcfg_datasets = [
+        generate_dataset(*row, 10_000_000, num_toks_per_seq=context_length)
+        for row in dataset_stats
+    ]
+    med_std_gzips = [
+        calculate_median_stdev_gzipability(pcfg_dataset)
+        for pcfg_dataset in pcfg_datasets
+    ]
+    for i, pcfg_dataset in enumerate(pcfg_datasets):
+        med, std = med_std_gzips[i]
+        total_toks = count_total_tokens(
+            pcfg_dataset_to_dataloader(pcfg_dataset, padder_tokenizer=tokenizer)
+        )
+
+        print(
+            f"{i}: {med:.3f} +- {std:.3f} ({total_toks})  | [{' '.join([str(x) for x in dataset_stats[i]])}]"
+        )
+        upload_to_huggingface(pcfg_dataset, med)

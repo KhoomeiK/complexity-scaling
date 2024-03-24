@@ -40,9 +40,11 @@ def compute_perplexity(dataloader, model, device="cuda"):
     return np.mean(ppls)
 
 
-def run_training(model, train_dataloader, valid_dataloader, optimizer, num_epochs=10):
-    train_perplexities = []
-    valid_perplexities = []
+def run_training(
+    model, train_dataloader, valid_dataloader, optimizer, num_epochs=10, device="cuda"
+):
+    train_loss = []
+    valid_loss = []
 
     for epoch in range(num_epochs):
         progress_bar = tqdm(
@@ -55,21 +57,22 @@ def run_training(model, train_dataloader, valid_dataloader, optimizer, num_epoch
             outputs = model(**batch)
             loss = outputs.loss
             loss.backward()
+            train_loss.append(loss.item())
 
             optimizer.step()
             optimizer.zero_grad()
             progress_bar.update(1)
 
-        train_perplexity = compute_perplexity(train_dataloader, model)
-        train_perplexities.append(train_perplexity)
-
         model.eval()
         with torch.no_grad():
-            valid_perplexity = compute_perplexity(valid_dataloader, model)
-            valid_perplexities.append(valid_perplexity)
+            for batch in valid_dataloader:
+                batch = {k: v.to(device) for k, v in batch.items()}
+                outputs = model(**batch)
+                loss = outputs.loss
+                valid_loss.append(loss.item())
 
         print(
-            f"Epoch {epoch}: Training Perplexity: {train_perplexity}, Validation Perplexity: {valid_perplexity}"
+            f"Train Loss: {np.median(train_loss):.3f}, Valid Loss: {np.median(valid_loss):.3f}"
         )
 
-    return train_perplexities, valid_perplexities
+    return train_loss, valid_loss
