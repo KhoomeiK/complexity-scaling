@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "complexity-scaling"
+version = "0.1.0"
+description = "data-sensitive scaling laws"
+authors = ["khoomeik <32777448+KhoomeiK@users.noreply.github.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+transformers = "^4.39.1"
+torch = "^2.2.1"
+statistics = "^1.0.3.5"
+pcfg = "^0.1.5"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
