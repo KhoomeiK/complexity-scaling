@@ -26,21 +26,25 @@ def run_scaling_exps(cuda_idx=None):
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
     model_sizes = {
-        "hidden_size": [64, 128, 256, 512, 1024],
-        "intermediate_size": [128, 256, 512, 1024, 2048],
-        "num_hidden_layers": [2, 4, 6, 10, 20],
-        "num_attention_heads": [1, 2, 4, 8, 16],
+        "hidden_size": [64, 128, 256, 512, 1024, 2048],
+        "intermediate_size": [128, 256, 512, 1024, 2048, 4096],
+        "num_hidden_layers": [2, 4, 6, 10, 20, 30],
+        "num_attention_heads": [1, 2, 4, 8, 16, 32],
     }
 
     dataset_names = [
         "khoomeik/gzipscale-0.12-10M",
         "khoomeik/gzipscale-0.23-10M",
-        # "khoomeik/gzipscale-0.33-10M",
+        "khoomeik/gzipscale-0.33-10M",
         "khoomeik/gzipscale-0.45-10M",
         "khoomeik/gzipscale-0.61-10M",
     ]
     if cuda_idx is not None:
-        dataset_names = [dataset_names[cuda_idx]]
+        if cuda_idx > torch.cuda.device_count(): # NOTE: this is only for handling dataset #5 and will likely break on systems with >4 GPUs
+            dataset_names = [dataset_names[cuda_idx]]
+            cuda_idx = torch.cuda.device_count() - 1
+        else:
+            dataset_names = [dataset_names[cuda_idx]]
     pcfg_datasets = [download_from_huggingface(name) for name in dataset_names]
     med_std_gzips = [
         calculate_median_stdev_gzipability(pcfg_dataset)
@@ -120,7 +124,9 @@ def run_scaling_exps(cuda_idx=None):
 
 
 if __name__ == "__main__":
-    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import ThreadPoolExecutor, wait
 
     with ThreadPoolExecutor(max_workers=torch.cuda.device_count()) as executor:
-        executor.map(run_scaling_exps, range(torch.cuda.device_count()))
+        futures = [executor.submit(run_scaling_exps, i) for i in range(torch.cuda.device_count())]
+        wait(futures)
+    run_scaling_exps(4)  # NOTE: for running dataset 5
