@@ -1,5 +1,6 @@
 import gzip
 import io
+import random
 from typing import List, Union
 from statistics import median, stdev
 from torch.utils.data import DataLoader
@@ -79,7 +80,7 @@ def calculate_gzipability(
 def calculate_median_stdev_gzipability(pcfg_dataset):
     gzipability_scores = [
         calculate_gzipability([int(tok) for tok in row.split(" ")])
-        for row in pcfg_dataset
+        for row in random.sample(pcfg_dataset, min(100, len(pcfg_dataset)))
     ]
     med = median(gzipability_scores)
 
