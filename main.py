@@ -40,7 +40,7 @@ def run_scaling_exps(cuda_idx=None):
         "khoomeik/gzipscale-0.61-10M",
     ]
     if cuda_idx is not None:
-        if cuda_idx > torch.cuda.device_count(): # NOTE: this is only for handling dataset #5 and will likely break on systems with >4 GPUs
+        if cuda_idx == torch.cuda.device_count(): # NOTE: this is only for handling dataset #5 and will likely break on systems with >4 GPUs
             dataset_names = [dataset_names[cuda_idx]]
             cuda_idx = torch.cuda.device_count() - 1
         else:
