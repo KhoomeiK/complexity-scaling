@@ -28,9 +28,12 @@ def pad_and_mask(sequence, sequence_length):
 
 
 def pcfg_dataset_to_dataloader(
-    pcfg_dataset, padder_tokenizer, batch_size=8, context_length=256
+    pcfg_dataset, padder_tokenizer, batch_size=8, context_length=256, dataset_name=""
 ):
-    tok_seqs = [[int(tok) for tok in doc.split(" ")] for doc in pcfg_dataset]
+    if 'code' in dataset_name:
+        tok_seqs = pcfg_dataset
+    else:
+        tok_seqs = [[int(tok) for tok in doc.split(" ")] for doc in pcfg_dataset]
 
     input_ids, attention_masks = [], []
     for seq in tok_seqs:
@@ -79,8 +82,8 @@ def calculate_gzipability(
 
 def calculate_median_stdev_gzipability(pcfg_dataset):
     gzipability_scores = [
-        calculate_gzipability([int(tok) for tok in row.split(" ")])
-        for row in random.sample(pcfg_dataset, min(100, len(pcfg_dataset)))
+        calculate_gzipability(row)
+        for row in random.sample(pcfg_dataset, min(1000, len(pcfg_dataset)))
     ]
     med = median(gzipability_scores)
 
@@ -92,7 +95,7 @@ def calculate_median_stdev_gzipability(pcfg_dataset):
     return med, std_dev
 
 
-def upload_to_huggingface(pcfg_dataset, gzip):
+def upload_to_huggingface(pcfg_dataset, gzip, dataset_stats=None):
     api = HfApi()
     token = HfFolder.get_token()
     if token is None:
@@ -107,12 +110,16 @@ def upload_to_huggingface(pcfg_dataset, gzip):
     }
 
     dataset = DatasetDict(dataset_dict)
-    dataset.push_to_hub(f"{username}/gzipscale-{gzip:0.2f}-10M")
+    dataset.push_to_hub(f"{username}/gzipscale-{gzip:0.2f}-{('_'.join([str(x) for x in dataset_stats[:-1]])) + '-' if dataset_stats else ''}100M")
 
 
 def download_from_huggingface(dataset_name):
     dataset_dict = load_dataset(dataset_name)
     dataset = dataset_dict["train"]
+    
+    if 'code' in dataset_name:
+        return dataset['input_ids']
+
     pcfg_dataset = dataset["text"]
     return pcfg_dataset
 
@@ -120,30 +127,35 @@ def sample_code_dataset(tokenizer, context_length=256):
     ds = load_dataset("codeparrot/github-code", streaming=True, split="train")
 
     seqs = []
-    for row in ds:
-        if row['language'] == 'C':
-            outputs = tokenizer(row['code'], add_special_tokens=False)
-            if len(outputs['input_ids']) < context_length:
-                continue
+    try:
+        for row in ds:
+            if row['language'] == 'C':
+                outputs = tokenizer(row['code'], add_special_tokens=False)
+                if len(outputs['input_ids']) < context_length:
+                    continue
 
-            input_ids = outputs['input_ids']
-            
-            for i, subseq in enumerate(input_ids[::context_length]):
-                if (i+1)*context_length > len(input_ids):
-                    break
-                seq = input_ids[i*context_length : (i+1)*context_length]
-                seqs.append({'input_ids': seq})
+                input_ids = outputs['input_ids']
+                
+                for i, subseq in enumerate(input_ids[::context_length]):
+                    if (i+1)*context_length > len(input_ids):
+                        break
+                    seq = input_ids[i*context_length : (i+1)*context_length]
+                    seqs.append({'input_ids': seq})
 
-        if len(seqs) % 10_000 < 10:
-            print(len(seqs))
+            if len(seqs) % 10_000 < 10:
+                print(len(seqs))
 
-        if len(seqs) > 1_000_000:
-            break
+            if len(seqs) > 31_250_000: # 8B tokens
+                break
+    # except http.client.RemoteDisconnected as e:
+    except Exception as e:
+        print(e)
+        print("Connection to HuggingFace Hub was lost. Saving current progress...")
 
     print(len(seqs))
     tokenized_code_dataset = DatasetDict({"train": Dataset.from_list(seqs)})
     tokenized_code_dataset.set_format("torch")
-    tokenized_code_dataset.push_to_hub(f"khoomeik/gzipscale-code-C-{(len(seqs) * context_length / 1_000_000):0.1f}M")
+    tokenized_code_dataset.push_to_hub(f"khoomeik/gzipscale-code-C-{(len(seqs) * context_length / 1_000_000):0.0f}M")
 
 if __name__ == '__main__':
     from transformers import AutoTokenizer

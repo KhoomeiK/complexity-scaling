@@ -1,6 +1,6 @@
 import random
 from pcfg import PCFG
-
+import threading
 
 def generate_probs(num_options):
     if num_options <= 0:
@@ -77,6 +77,8 @@ def generate_dataset(
     num_toks_total,
     num_toks_per_seq=256,
 ) -> list[str]:
+    print(num_nonterminals, num_terminals, rhs_max_options, rhs_max_len)
+
     grammar = create_random_pcfg(
         num_nonterminals,
         num_terminals,
@@ -98,6 +100,7 @@ def generate_dataset(
             except RecursionError:
                 continue
             except StopIteration:
+                print('No more sentences to generate')
                 break  # No more sentences can be generated
 
             sentence_token_count = sentence.count(" ") + 2
@@ -127,6 +130,86 @@ def generate_dataset(
 
     return dataset
 
+def generate_dataset_part(grammar, num_toks_per_seq, target_tokens, dataset, total_tokens_generated, lock):
+    local_dataset = []
+    local_tokens_generated = 0
+    while local_tokens_generated < target_tokens:
+        document_tokens = 0
+        document = []
+        while document_tokens < num_toks_per_seq:
+            try:
+                sentence = next(grammar.generate(1))
+            except RecursionError:
+                continue
+            except StopIteration:
+                print('No more sentences to generate')
+                break
+            
+            print(sentence)
+            sentence_token_count = sentence.count(" ") + 2
+            available_space = num_toks_per_seq - document_tokens
+            if sentence_token_count <= available_space:
+                document.append(sentence)
+                document_tokens += sentence_token_count
+            else:
+                words = sentence.split()
+                words_to_add = words[:available_space]
+                truncated_sentence = " ".join(words_to_add)
+                document.append(truncated_sentence)
+                document_tokens += len(words_to_add)
+
+            if document_tokens == num_toks_per_seq:
+                break
+
+        if document:
+            local_dataset.append(" 0 ".join(document))
+            local_tokens_generated += document_tokens
+
+        if local_tokens_generated >= target_tokens or not document:
+            break
+
+    with lock:
+        dataset.extend(local_dataset)
+        total_tokens_generated[0] += local_tokens_generated
+
+def generate_dataset_threaded(
+    num_nonterminals,
+    num_terminals,
+    rhs_max_options,
+    rhs_max_len,
+    constrain_to_pfsa,
+    num_toks_total,
+    num_toks_per_seq=256,
+) -> list[str]:
+    # NOTE: threaded dataset generation isn't noticeably faster
+    print(num_nonterminals, num_terminals, rhs_max_options, rhs_max_len)
+
+    num_threads = 16
+    threads = []
+    lock = threading.Lock()
+    dataset = []
+    total_tokens_generated = 0
+    target_tokens_per_thread = num_toks_total // num_threads
+
+    grammar = create_random_pcfg(
+        num_nonterminals,
+        num_terminals,
+        rhs_max_options=rhs_max_options,
+        rhs_max_len=rhs_max_len,
+        constrain_to_pfsa=constrain_to_pfsa,
+    )
+
+    for _ in range(num_threads):
+        thread = threading.Thread(target=generate_dataset_part, args=(grammar, num_toks_per_seq, target_tokens_per_thread, dataset, total_tokens_generated, lock))
+        threads.append(thread)
+        thread.start()
+    
+    print(dataset)
+
+    for thread in threads:
+        thread.join()
+
+    return dataset
 
 if __name__ == "__main__":
     from data_utils import (
@@ -144,18 +227,30 @@ if __name__ == "__main__":
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
     dataset_stats = [
-        (3, 20, 2, 2, False),
-        (5, 50, 3, 2, False),
-        (10, 150, 5, 3, False),
-        (20, 300, 10, 5, False),
-        (30, 400, 10, 8, False),
-        (50, 500, 20, 15, False),
-        (100, 2000, 100, 30, False),
+        # (3, 20, 2, 2, False),
+        # (10, 150, 5, 3, False),
+        # (20, 300, 10, 5, False),
+        # (30, 400, 10, 8, False),
+        # (100, 2000, 100, 30, False),
+        # (50, 500, 20, 15, False),
+
+        # (10, 600, 5, 10, False), # .32
+        # (20, 300, 15, 5, False), # .36
+        # (30, 200, 10, 15, False), # .38
+        # (50, 100, 20, 20, False), # .34
+
+        # (3, 300, 2, 2, False), # isovocab
+        # (10, 300, 5, 3, False),
+        # (20, 300, 10, 5, False),
+        # (50, 300, 20, 10, False),
+        (100, 300, 100, 30, False),
+        (200, 300, 200, 50, False),
     ]
     for row in dataset_stats: # NOTE: runs one dataset generation + upload at a time
         dataset_stats = [row]
+
         pcfg_datasets = [
-            generate_dataset(*row, 10_000_000, num_toks_per_seq=context_length)
+            generate_dataset(*row, 100_000_000, num_toks_per_seq=context_length)
             for row in dataset_stats
         ]
         med_std_gzips = [
@@ -171,4 +266,4 @@ if __name__ == "__main__":
             print(
                 f"{i}: {med:.3f} +- {std:.3f} ({total_toks})  | [{' '.join([str(x) for x in dataset_stats[i]])}]"
             )
-            upload_to_huggingface(pcfg_dataset, med)
+            upload_to_huggingface(pcfg_dataset, med, dataset_stats[i])

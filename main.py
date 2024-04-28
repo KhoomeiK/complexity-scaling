@@ -33,11 +33,32 @@ def run_scaling_exps(cuda_idx=None):
     }
 
     dataset_names = [
-        "khoomeik/gzipscale-0.12-10M",
-        "khoomeik/gzipscale-0.23-10M",
-        "khoomeik/gzipscale-0.33-10M",
-        "khoomeik/gzipscale-0.45-10M",
-        "khoomeik/gzipscale-0.61-10M",
+        # "khoomeik/gzipscale-0.32-10_500_5_10-100M",
+        # "khoomeik/gzipscale-0.36-20_300_10_5-100M",
+        # "khoomeik/gzipscale-0.40-30_200_15_20-100M",
+        # "khoomeik/gzipscale-0.38-(50,100,30,15)-100M",
+
+        # "khoomeik/gzipscale-code-C-256M",
+        # "khoomeik/gzipscale-code-python-256M",
+        # "khoomeik/gzipscale-code-html-256M",
+
+        # "khoomeik/gzipscale-0.11-100M",
+        # "khoomeik/gzipscale-0.22-100M",
+        # "khoomeik/gzipscale-0.35-100M",
+        # "khoomeik/gzipscale-0.42-100M",
+        # "khoomeik/gzipscale-0.51-100M",
+        # "khoomeik/gzipscale-0.61-100M",
+
+        # "khoomeik/gzipscale-0.12-10M",
+        # "khoomeik/gzipscale-0.23-10M",
+        # "khoomeik/gzipscale-0.33-10M",
+        # "khoomeik/gzipscale-0.45-10M",
+        # "khoomeik/gzipscale-0.61-10M",
+
+        "khoomeik/gzipscale-0.11-3_300_2_2-100M",
+        "khoomeik/gzipscale-0.25-10_300_5_3-100M",
+        "khoomeik/gzipscale-0.36-20_300_10_5-100M",
+        "khoomeik/gzipscale-0.47-50_300_20_10-100M"
     ]
     if cuda_idx is not None:
         if cuda_idx == torch.cuda.device_count(): # NOTE: this is only for handling dataset #5 and will likely break on systems with >4 GPUs
@@ -45,6 +66,7 @@ def run_scaling_exps(cuda_idx=None):
             cuda_idx = torch.cuda.device_count() - 1
         else:
             dataset_names = [dataset_names[cuda_idx]]
+            # cuda_idx = 1
     pcfg_datasets = [download_from_huggingface(name) for name in dataset_names]
     med_std_gzips = [
         calculate_median_stdev_gzipability(pcfg_dataset)
@@ -53,15 +75,17 @@ def run_scaling_exps(cuda_idx=None):
     for i, pcfg_dataset in enumerate(pcfg_datasets):
         med, std = med_std_gzips[i]
         total_toks = count_total_tokens(
-            pcfg_dataset_to_dataloader(pcfg_dataset, padder_tokenizer=tokenizer)
+            pcfg_dataset_to_dataloader(pcfg_dataset, padder_tokenizer=tokenizer, dataset_name=dataset_names[i])
         )
         print(f"{i}: {med:.3f} +- {std:.3f} ({total_toks})  | {dataset_names[i]}")
 
     device = f"cuda:{cuda_idx}" if cuda_idx is not None else "cpu"
     results = []
 
+    torch.cuda.empty_cache()
+
     for i, pcfg_dataset in enumerate(pcfg_datasets):
-        for data_portion in (0.01, 0.1, 0.2, 0.5, 0.95):
+        for data_portion in (0.001, 0.01, 0.1, 0.2, 0.5, 0.95):
             med_gzip, std_gzip = med_std_gzips[i]
 
             train_data_size = int(len(pcfg_dataset) * data_portion)
@@ -70,11 +94,13 @@ def run_scaling_exps(cuda_idx=None):
                 pcfg_dataset[:train_data_size],
                 padder_tokenizer=tokenizer,
                 batch_size=32,
+                dataset_name=dataset_names[i]
             )
             valid_dataloader = pcfg_dataset_to_dataloader(
                 pcfg_dataset[-valid_data_size:],
                 padder_tokenizer=tokenizer,
                 batch_size=32,
+                dataset_name=dataset_names[i]
             )
             train_token_ct = count_total_tokens(train_dataloader)
 
@@ -129,4 +155,6 @@ if __name__ == "__main__":
     with ThreadPoolExecutor(max_workers=torch.cuda.device_count()) as executor:
         futures = [executor.submit(run_scaling_exps, i) for i in range(torch.cuda.device_count())]
         wait(futures)
-    run_scaling_exps(4)  # NOTE: for running dataset 5
+    # run_scaling_exps(4)  # NOTE: for running dataset 5
+
+    # run_scaling_exps(0)
