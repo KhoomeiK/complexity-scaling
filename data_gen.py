@@ -152,21 +152,23 @@ if __name__ == "__main__":
         (50, 500, 20, 15, False),
         (100, 2000, 100, 30, False),
     ]
-    pcfg_datasets = [
-        generate_dataset(*row, 10_000_000, num_toks_per_seq=context_length)
-        for row in dataset_stats
-    ]
-    med_std_gzips = [
-        calculate_median_stdev_gzipability(pcfg_dataset)
-        for pcfg_dataset in pcfg_datasets
-    ]
-    for i, pcfg_dataset in enumerate(pcfg_datasets):
-        med, std = med_std_gzips[i]
-        total_toks = count_total_tokens(
-            pcfg_dataset_to_dataloader(pcfg_dataset, padder_tokenizer=tokenizer)
-        )
+    for row in dataset_stats: # NOTE: runs one dataset generation + upload at a time
+        dataset_stats = [row]
+        pcfg_datasets = [
+            generate_dataset(*row, 10_000_000, num_toks_per_seq=context_length)
+            for row in dataset_stats
+        ]
+        med_std_gzips = [
+            calculate_median_stdev_gzipability(pcfg_dataset)
+            for pcfg_dataset in pcfg_datasets
+        ]
+        for i, pcfg_dataset in enumerate(pcfg_datasets):
+            med, std = med_std_gzips[i]
+            total_toks = count_total_tokens(
+                pcfg_dataset_to_dataloader(pcfg_dataset, padder_tokenizer=tokenizer)
+            )
 
-        print(
-            f"{i}: {med:.3f} +- {std:.3f} ({total_toks})  | [{' '.join([str(x) for x in dataset_stats[i]])}]"
-        )
-        upload_to_huggingface(pcfg_dataset, med)
+            print(
+                f"{i}: {med:.3f} +- {std:.3f} ({total_toks})  | [{' '.join([str(x) for x in dataset_stats[i]])}]"
+            )
+            upload_to_huggingface(pcfg_dataset, med)

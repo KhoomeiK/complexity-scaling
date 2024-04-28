@@ -115,3 +115,41 @@ def download_from_huggingface(dataset_name):
     dataset = dataset_dict["train"]
     pcfg_dataset = dataset["text"]
     return pcfg_dataset
+
+def sample_code_dataset(tokenizer, context_length=256):
+    ds = load_dataset("codeparrot/github-code", streaming=True, split="train")
+
+    seqs = []
+    for row in ds:
+        if row['language'] == 'C':
+            outputs = tokenizer(row['code'], add_special_tokens=False)
+            if len(outputs['input_ids']) < context_length:
+                continue
+
+            input_ids = outputs['input_ids']
+            
+            for i, subseq in enumerate(input_ids[::context_length]):
+                if (i+1)*context_length > len(input_ids):
+                    break
+                seq = input_ids[i*context_length : (i+1)*context_length]
+                seqs.append({'input_ids': seq})
+
+        if len(seqs) % 10_000 < 10:
+            print(len(seqs))
+
+        if len(seqs) > 1_000_000:
+            break
+
+    print(len(seqs))
+    tokenized_code_dataset = DatasetDict({"train": Dataset.from_list(seqs)})
+    tokenized_code_dataset.set_format("torch")
+    tokenized_code_dataset.push_to_hub(f"khoomeik/gzipscale-code-C-{(len(seqs) * context_length / 1_000_000):0.1f}M")
+
+if __name__ == '__main__':
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained(
+        "meta-llama/Llama-2-7b-chat-hf", token="[REDACTED]"
+    )
+    tokenizer.add_special_tokens({"pad_token": "<pad>"})
+    
+    sample_code_dataset(tokenizer)
