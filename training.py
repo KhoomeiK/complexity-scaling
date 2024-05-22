@@ -47,9 +47,8 @@ def run_training(
     train_loss = []
     valid_loss = []
 
-    lr_scheduler = CosineAnnealingLR(optimizer, T_max=len(train_dataloader))
-
     for epoch in range(num_epochs):
+        lr_scheduler = CosineAnnealingLR(optimizer, T_max=len(train_dataloader))
         progress_bar = tqdm(
             range(len(train_dataloader)), desc=f"Epoch {epoch + 1}/{num_epochs}"
         )
@@ -66,7 +65,7 @@ def run_training(
             optimizer.zero_grad()
             progress_bar.update(1)
 
-        lr_scheduler.step()
+            lr_scheduler.step()  # NOTE: all single-epoch scaling experiments before 4/30 mistakenly did not step the scheduler
 
         model.eval()
         with torch.no_grad():

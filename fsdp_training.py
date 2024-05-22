@@ -1,7 +1,7 @@
 import json
 import os
 from tqdm.auto import tqdm
-from datasets import Dataset
+from datasets import Dataset, load_dataset
 from transformers import DataCollatorWithPadding, AdamW, AutoTokenizer, LlamaForCausalLM, LlamaConfig
 
 import torch
@@ -14,6 +14,33 @@ import torch.multiprocessing as mp
 
 from data_utils import pad_and_mask, download_from_huggingface
 
+
+def create_dataloader(
+    dataset_name,
+    padder_tokenizer,
+    batch_size=32,
+    context_length=256,
+    rank=0,
+    world_size=1,
+):
+    dataset = load_dataset(dataset_name)["train"]
+    data_collator = DataCollatorWithPadding(tokenizer=padder_tokenizer)
+    data_sampler = DistributedSampler(
+        dataset, rank=rank, num_replicas=world_size, shuffle=True
+    )
+
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        collate_fn=data_collator,
+        sampler=data_sampler,
+        # CUDA args:
+        num_workers=2,
+        pin_memory=True,
+        shuffle=False,
+    )
+
+    return dataloader
 
 def pcfg_dataset_to_dataloader(
     pcfg_dataset,
@@ -44,7 +71,6 @@ def pcfg_dataset_to_dataloader(
     tokenized_dataset.set_format("torch")
 
     data_collator = DataCollatorWithPadding(tokenizer=padder_tokenizer)
-
     data_sampler = DistributedSampler(  # TODO: refactor via `distributed` flag back into original pcfg_dataset_to_dataloader
         tokenized_dataset, rank=rank, num_replicas=world_size, shuffle=True
     )
@@ -88,6 +114,8 @@ def run_fsdp_training(
         model.train()
         for batch in train_dataloader:
             batch = {k: v.to(rank) for k, v in batch.items()}
+            if 'labels' not in batch: # NOTE: hack to get around DataLoader not calling CodeDataset.__iter__
+                batch['labels'] = batch['input_ids'].clone()
             optimizer.zero_grad()
             outputs = model(**batch)
             loss = outputs.loss
@@ -117,11 +145,11 @@ def fsdp_main(rank, world_size, args):
 
     dataset_name = "khoomeik/gzipscale-code-C-8000M"
     pcfg_dataset = download_from_huggingface(dataset_name)
-    train_dataloader = pcfg_dataset_to_dataloader(
-        pcfg_dataset,
+    train_dataloader = create_dataloader(
+        dataset_name,
         padder_tokenizer=tokenizer,
         batch_size=32,
-        dataset_name=dataset_name,
+        # dataset_name=dataset_name,
         rank=rank,
         world_size=world_size,
     )
