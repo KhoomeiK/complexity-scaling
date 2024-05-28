@@ -7,7 +7,7 @@
 <p align="center">
 <a href="https://twitter.com/khoomeik">🐦 Twitter</a>
 <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
-<a href="https://twitter.com/khoomeik">📄 Arxiv</a>
+<a href="https://arxiv.org/abs/2405.16684">📄 Arxiv</a>
 <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
 <a href="https://huggingface.co/khoomeik">🤗 Datasets</a>
 </p>
