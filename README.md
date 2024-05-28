@@ -5,7 +5,7 @@
   gzip Predicts Data-dependent Scaling Laws
 </h2> -->
 <p align="center">
-<a href="https://twitter.com/khoomeik">🐦 Twitter</a>
+<a href="https://x.com/khoomeik/status/1795477359933706272">🐦 Twitter</a>
 <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
 <a href="https://arxiv.org/abs/2405.16684">📄 Arxiv</a>
 <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
